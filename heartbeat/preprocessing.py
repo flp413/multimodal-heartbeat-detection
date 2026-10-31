@@ -1,8 +1,14 @@
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 from scipy.stats import trim_mean
 from wfdb.processing import resample_sig
 
 from .config import DetectorConfig
+
+# Rows processed at once by the TMA filter. Keeps memory low for the
+# 1 s BP window on 10 minute records.
+_CHUNK = 20000
+
 
 def resample(signal: np.ndarray, fs: float, target_fs: int) -> np.ndarray:
     if fs == target_fs:
@@ -13,20 +19,20 @@ def resample(signal: np.ndarray, fs: float, target_fs: int) -> np.ndarray:
 def trimmed_moving_average(signal: np.ndarray, half_window: int, alpha: float) -> np.ndarray:
     """Centered trimmed moving average, window = 2 * half_window + 1 samples."""
     padded = np.pad(signal, half_window, mode="edge")
+    windows = sliding_window_view(padded, 2 * half_window + 1)
+
     out = np.empty(len(signal))
-    for i in range(len(signal)):
-        out[i] = trim_mean(padded[i: i + 2 * half_window + 1], alpha / 2)
+    for start in range(0, len(signal), _CHUNK):
+        stop = start + _CHUNK
+        out[start:stop] = trim_mean(windows[start:stop], alpha / 2, axis=1)
     return out
 
 
 def range_signal(signal: np.ndarray, window: int) -> np.ndarray:
     """Local max minus local min over the previous `window` samples."""
     padded = np.pad(signal, (window, 0), mode="edge")
-    out = np.empty(len(signal))
-    for i in range(len(signal)):
-        segment = padded[i: i + window]
-        out[i] = segment.max() - segment.min()
-    return out
+    windows = sliding_window_view(padded, window)[: len(signal)]
+    return windows.max(axis=1) - windows.min(axis=1)
 
 
 def standardize(signal: np.ndarray) -> np.ndarray:

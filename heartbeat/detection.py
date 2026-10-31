@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 
 from .config import DetectorConfig
 
@@ -6,10 +7,8 @@ from .config import DetectorConfig
 def _centered_envelope(signal: np.ndarray, window: int, func) -> np.ndarray:
     half = window // 2
     padded = np.pad(signal, half, mode="edge")
-    out = np.empty(len(signal))
-    for i in range(len(signal)):
-        out[i] = func(padded[i: i + 2 * half])
-    return out
+    windows = sliding_window_view(padded, 2 * half)[: len(signal)]
+    return func(windows, axis=1)
 
 
 def dynamic_threshold(rs: np.ndarray, cfg: DetectorConfig):
