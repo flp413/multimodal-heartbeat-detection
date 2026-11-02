@@ -1,7 +1,7 @@
 """Run the detector on every record in a folder and compare with the .atr annotations.
 
     python scripts/evaluate.py data/set-p
-    python scripts/evaluate.py data/set-p --preset initial --out results/metrics_initial.csv
+    python scripts/evaluate.py data/set-p --preset baseline
 """
 import argparse
 import csv
@@ -13,8 +13,9 @@ import wfdb
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from heartbeat import HeartbeatDetector, get_preset  # noqa: E402
+from heartbeat.config import PRESETS  # noqa: E402
 from heartbeat.evaluation import match_beats, scores  # noqa: E402
-from heartbeat.io import read_reference, write_asc  # noqa: E402
+from heartbeat.io import read_reference, write_asc, write_qrs  # noqa: E402
 
 
 def list_records(data_dir):
@@ -33,6 +34,7 @@ def run_one(job):
     beats = HeartbeatDetector(get_preset(preset)).detect_record(path)
     if ann_dir:
         write_asc(beats, os.path.join(ann_dir, f"{name}.asc"))
+        write_qrs(beats, name, fs, ann_dir)
 
     tp, fp, fn = match_beats(beats, read_reference(path), int(tolerance_sec * fs))
     return {"record": name, "TP": tp, "FP": fp, "FN": fn, **scores(tp, fp, fn)}
@@ -41,10 +43,10 @@ def run_one(job):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("data_dir")
-    parser.add_argument("--preset", default="improved", choices=["improved", "initial"])
+    parser.add_argument("--preset", default="voting", choices=list(PRESETS))
     parser.add_argument("--tolerance", type=float, default=0.05, help="matching window in seconds")
     parser.add_argument("--out", default=None, help="CSV with per-record results")
-    parser.add_argument("--annotations", default=None, help="folder to also save .asc files")
+    parser.add_argument("--annotations", default=None, help="folder to also save .asc and .qrs files")
     parser.add_argument("--jobs", type=int, default=os.cpu_count())
     args = parser.parse_args()
 

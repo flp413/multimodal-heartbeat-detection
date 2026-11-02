@@ -37,19 +37,20 @@ class DetectorConfig:
     median_filter_size: int = 19
 
 
-# Settings before my changes, closer to the original paper. Used to compare
-# both versions on the same records (see scripts/evaluate.py --preset).
-INITIAL = DetectorConfig(
+# Close to the original paper: every clean beat from any channel is kept.
+BASELINE = DetectorConfig(
     refine_window=0.05,
     min_rr_interval=0.0,
     min_agreeing_channels=1,
 )
 
-IMPROVED = DetectorConfig()
+# First round of changes: tighter refinement, minimum RR and a beat has to
+# be seen in at least two channels.
+VOTING = DetectorConfig()
 
 PRESETS = {
-    "improved": IMPROVED,
-    "initial": INITIAL,
+    "voting": VOTING,
+    "baseline": BASELINE,
 }
 
 

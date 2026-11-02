@@ -18,7 +18,8 @@ def rr_regularity(signal: np.ndarray, fs: float, signal_type: str, cfg: Detector
         return 0.0
 
     rr = np.diff(beats)
-    ratios = rr[1:] / rr[:-1]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratios = rr[1:] / rr[:-1]
     stable = np.sum((ratios >= cfg.rr_ratio_low) & (ratios <= cfg.rr_ratio_high))
     return stable / len(ratios)
 
