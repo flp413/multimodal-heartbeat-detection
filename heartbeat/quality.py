@@ -5,6 +5,8 @@ from .detection import detect_beats
 from .preprocessing import preprocess
 
 PULSATILE_KEYWORDS = ["pressure", "bp", "cvp", "pa", "pap", "art", "pleth", "abp"]
+ECG_NAMES = {"ecg", "ekg", "i", "ii", "iii", "mlii", "avr", "avl", "avf",
+             "v", "v1", "v2", "v3", "v4", "v5", "v6"}
 
 
 def rr_regularity(signal: np.ndarray, fs: float, signal_type: str, cfg: DetectorConfig) -> float:

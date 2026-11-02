@@ -6,6 +6,7 @@ from scipy.ndimage import median_filter
 from scipy.signal import medfilt
 
 from .config import DetectorConfig
+from .quality import ECG_NAMES
 
 PULSATILE_NAMES = ["abp", "art", "bp", "pap", "pleth", "ppg", "pressure"]
 
@@ -59,12 +60,18 @@ def correct_delay(reference: np.ndarray, beats: np.ndarray, kernel: int,
     return beats - np.round(delays).astype(int)
 
 
-def _pick(detections, signal_type, preferred) -> Optional[ChannelDetection]:
-    """Best channel of a type; channels with a matching name come first."""
-    candidates = [d for d in detections if d.signal_type == signal_type]
+def _pick(detections, signal_type, is_named) -> Optional[ChannelDetection]:
+    """Choose the channel for a role (ECG or pulse).
+
+    A channel whose name says what it is wins, even if the quality check
+    preferred the other settings for it (some pressure signals look more
+    regular with the ECG settings). Otherwise the best channel of that type.
+    """
+    named = [d for d in detections if is_named(d.name.lower())]
+    candidates = named or [d for d in detections if d.signal_type == signal_type]
     if not candidates:
         return None
-    return max(candidates, key=lambda d: (any(k in d.name.lower() for k in preferred), d.quality, -d.channel_idx))
+    return max(candidates, key=lambda d: (d.quality, -d.channel_idx))
 
 
 def fuse_vote(detections: List[ChannelDetection], cfg: DetectorConfig) -> np.ndarray:
@@ -139,8 +146,10 @@ def fuse(detections: List[ChannelDetection], original_fs: float, cfg: DetectorCo
         d = detections[0]
         fused = d.beats[d.clean_mask()]
     elif cfg.fusion == "primary":
-        ecg = _pick(detections, "ecg", ["ecg", "ekg"])
-        pulse = _pick(detections, "bp", PULSATILE_NAMES)
+        ecg = _pick(detections, "ecg", lambda n: n in ECG_NAMES)
+        pulse = _pick(detections, "bp", lambda n: any(k in n for k in PULSATILE_NAMES))
+        if pulse is ecg:
+            pulse = None
         if ecg is None or pulse is None:
             only = ecg or pulse
             fused = only.beats[only.clean_mask()]
