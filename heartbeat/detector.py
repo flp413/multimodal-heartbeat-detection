@@ -37,6 +37,6 @@ class HeartbeatDetector:
                     int(self.cfg.r_peak_before * self.cfg.target_fs),
                     int(self.cfg.r_peak_after * self.cfg.target_fs),
                 )
-            detections.append(ChannelDetection(ch, signal_type, beats, noisy, score))
+            detections.append(ChannelDetection(ch, signal_type, beats, noisy, score, name))
 
         return fuse(detections, fs, self.cfg)

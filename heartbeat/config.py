@@ -37,9 +37,12 @@ class DetectorConfig:
     r_peak_after: float = 0.05
 
     # multi-channel fusion
+    fusion: str = "primary"      # "primary" or "vote", see fusion.py
     merge_tolerance: float = 0.15
-    min_agreeing_channels: int = 2
     median_filter_size: int = 19
+    max_delay: float = 0.5       # largest believable ECG -> pulse delay
+    gap_factor: float = 1.5      # gap (in local RR) that the pulse channel may fill
+    min_agreeing_channels: int = 2  # only used by "vote"
 
 
 # Close to the original paper: every clean beat from any channel is kept.
@@ -47,13 +50,15 @@ BASELINE = DetectorConfig(
     refine_window=0.05,
     min_rr_interval=0.0,
     locate_r_peak=False,
+    fusion="vote",
     min_agreeing_channels=1,
 )
 
 # First round of changes: tighter refinement, minimum RR and a beat has to
 # be seen in at least two channels.
-VOTING = DetectorConfig(locate_r_peak=False)
+VOTING = DetectorConfig(locate_r_peak=False, fusion="vote")
 
+# Current version: R peak localisation and ECG-led fusion.
 IMPROVED = DetectorConfig()
 
 PRESETS = {
