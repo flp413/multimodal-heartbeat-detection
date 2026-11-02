@@ -43,14 +43,22 @@ def standardize(signal: np.ndarray) -> np.ndarray:
     return signal
 
 
-def preprocess(signal: np.ndarray, fs: float, signal_type: str, cfg: DetectorConfig) -> np.ndarray:
-    """Raw channel -> range signal at cfg.target_fs."""
+def remove_baseline(signal: np.ndarray, fs: float, signal_type: str, cfg: DetectorConfig) -> np.ndarray:
+    """Resample, subtract the TMA baseline and standardize."""
     signal = resample(signal, fs, cfg.target_fs)
 
     tma_window = cfg.window_ecg if signal_type == "ecg" else cfg.window_bp
     half_window = int(round(tma_window * cfg.target_fs / 2))
     filtered = signal - trimmed_moving_average(signal, half_window, cfg.alpha)
-    filtered = standardize(filtered)
+    return standardize(filtered)
 
+
+def to_range_signal(filtered: np.ndarray, signal_type: str, cfg: DetectorConfig) -> np.ndarray:
     length = cfg.length_ecg if signal_type == "ecg" else cfg.length_bp
     return range_signal(filtered, int(round(length * cfg.target_fs)))
+
+
+def preprocess(signal: np.ndarray, fs: float, signal_type: str, cfg: DetectorConfig) -> np.ndarray:
+    """Raw channel -> range signal at cfg.target_fs."""
+    filtered = remove_baseline(signal, fs, signal_type, cfg)
+    return to_range_signal(filtered, signal_type, cfg)

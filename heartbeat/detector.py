@@ -4,9 +4,9 @@ import numpy as np
 import wfdb
 
 from .config import DetectorConfig
-from .detection import detect_beats
+from .detection import detect_beats, locate_r_peaks
 from .fusion import ChannelDetection, fuse
-from .preprocessing import preprocess
+from .preprocessing import remove_baseline, to_range_signal
 from .quality import classify_channel
 
 
@@ -29,8 +29,14 @@ class HeartbeatDetector:
             if not signal_type:
                 continue
 
-            rs = preprocess(signal, fs, signal_type, self.cfg)
-            beats, noisy = detect_beats(rs, self.cfg)
+            filtered = remove_baseline(signal, fs, signal_type, self.cfg)
+            beats, noisy = detect_beats(to_range_signal(filtered, signal_type, self.cfg), self.cfg)
+            if signal_type == "ecg" and self.cfg.locate_r_peak:
+                beats = locate_r_peaks(
+                    filtered, beats,
+                    int(self.cfg.r_peak_before * self.cfg.target_fs),
+                    int(self.cfg.r_peak_after * self.cfg.target_fs),
+                )
             detections.append(ChannelDetection(ch, signal_type, beats, noisy, score))
 
         return fuse(detections, fs, self.cfg)

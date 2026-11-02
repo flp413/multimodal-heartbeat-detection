@@ -43,7 +43,7 @@ def run_one(job):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("data_dir")
-    parser.add_argument("--preset", default="voting", choices=list(PRESETS))
+    parser.add_argument("--preset", default="improved", choices=list(PRESETS))
     parser.add_argument("--tolerance", type=float, default=0.05, help="matching window in seconds")
     parser.add_argument("--out", default=None, help="CSV with per-record results")
     parser.add_argument("--annotations", default=None, help="folder to also save .asc and .qrs files")

@@ -19,7 +19,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("record", help="path to the record, without extension")
     parser.add_argument("--output-dir", default="results/annotations")
-    parser.add_argument("--preset", default="voting", choices=list(PRESETS))
+    parser.add_argument("--preset", default="improved", choices=list(PRESETS))
     parser.add_argument("--no-qrs", action="store_true", help="only write the .asc file")
     args = parser.parse_args()
 

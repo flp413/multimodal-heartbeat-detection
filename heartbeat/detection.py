@@ -65,3 +65,19 @@ def detect_beats(rs: np.ndarray, cfg: DetectorConfig):
     beats = refine_peaks(rs, candidates, int(cfg.refine_window * cfg.target_fs))
     beats = enforce_min_rr(beats, int(cfg.min_rr_interval * cfg.target_fs))
     return beats, noisy
+
+
+def locate_r_peaks(filtered: np.ndarray, beats: np.ndarray, before: int, after: int) -> np.ndarray:
+    """Move ECG beats from the range signal peak to the R peak.
+
+    The range signal peaks a bit after the QRS complex (it looks at the
+    previous 200 ms), and for wide or inverted complexes the delay can be
+    over 50 ms. Here we take the largest absolute deflection of the
+    baseline-corrected ECG in [beat - before, beat + after].
+    """
+    if len(beats) == 0:
+        return beats
+    magnitude = np.abs(filtered)
+    located = [max(0, b - before) + np.argmax(magnitude[max(0, b - before): b + after + 1])
+               for b in beats]
+    return np.unique(np.array(located, dtype=int))
