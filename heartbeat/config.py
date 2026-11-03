@@ -42,6 +42,11 @@ class DetectorConfig:
     median_filter_size: int = 19
     max_delay: float = 0.5       # largest believable ECG -> pulse delay
     gap_factor: float = 1.5      # gap (in local RR) that the pulse channel may fill
+    agreement_window: float = 5.0  # windows where ECG and pulse are compared, 0 = off
+    agreement_tolerance: float = 0.06
+    min_agreement: float = 0.6     # share of ECG beats that need a pulse beat nearby
+    min_pulse_regularity: float = 0.5
+    regularity_margin: float = 0.2   # pulse has to be this much more regular than the ECG
     min_agreeing_channels: int = 2  # only used by "vote"
 
 
@@ -56,7 +61,11 @@ BASELINE = DetectorConfig(
 
 # First round of changes: tighter refinement, minimum RR and a beat has to
 # be seen in at least two channels.
-VOTING = DetectorConfig(locate_r_peak=False, fusion="vote")
+VOTING = DetectorConfig(
+    locate_r_peak=False,
+    fusion="vote",
+    min_agreeing_channels=2,
+)
 
 # Current version: R peak localisation and ECG-led fusion.
 IMPROVED = DetectorConfig()

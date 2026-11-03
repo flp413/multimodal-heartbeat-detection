@@ -105,24 +105,105 @@ def fuse_vote(detections: List[ChannelDetection], cfg: DetectorConfig) -> np.nda
     return np.array(fused, dtype=int)
 
 
+def _regularity(beats: np.ndarray) -> float:
+    """Share of consecutive RR ratios between 0.8 and 1.2."""
+    if len(beats) < 3:
+        return 0.0
+    rr = np.diff(beats).astype(float)
+    ratios = rr[1:] / np.maximum(rr[:-1], 1)
+    return float(np.mean((ratios > 0.8) & (ratios < 1.2)))
+
+
+def _disagreeing_windows(ecg_beats, pulse_beats, cfg):
+    """Mark windows where the ECG beats have no pulse beat next to them.
+
+    Noise on the ECG lead gives a lot of extra beats that the range signal
+    can't tell apart from QRS complexes. In such a window most ECG beats
+    don't line up with the (already shifted) pulse beats. A window is only
+    handed over to the pulse if the pulse rhythm there is also clearly more
+    regular than the ECG one, otherwise we can't tell which channel is wrong
+    (e.g. an arrhythmia, or a pressure signal with a strong dicrotic notch).
+
+    Returns a list of (start, end) sample ranges.
+    """
+    window = int(cfg.agreement_window * cfg.target_fs)
+    tolerance = int(cfg.agreement_tolerance * cfg.target_fs)
+    end = max(ecg_beats[-1], pulse_beats[-1]) + 1
+
+    bad = []
+    for start in range(0, end, window):
+        e = ecg_beats[(ecg_beats >= start) & (ecg_beats < start + window)]
+        p = pulse_beats[(pulse_beats >= start) & (pulse_beats < start + window)]
+        if len(p) < 3 or _regularity(p) < cfg.min_pulse_regularity:
+            continue
+        if len(e):
+            matched = np.min(np.abs(e[:, None] - p[None, :]), axis=1) <= tolerance
+            if matched.mean() >= cfg.min_agreement:
+                continue
+            if len(e) >= 3 and _regularity(e) + cfg.regularity_margin >= _regularity(p):
+                continue
+        bad.append((start, start + window))
+    return bad
+
+
+def _in_ranges(beats, ranges):
+    mask = np.zeros(len(beats), dtype=bool)
+    for a, b in ranges:
+        mask |= (beats >= a) & (beats < b)
+    return mask
+
+
+def pulse_delay(ecg_beats, pulse_beats, cfg, exclude=()):
+    """Delay of every pulse beat behind the ECG (pulse transit time), in samples.
+
+    Delays are measured to the nearest ECG beat. Values far from the
+    overall median, and beats inside `exclude` ranges, are treated as wrong
+    matches; the rest is median filtered and interpolated.
+    """
+    raw = (pulse_beats - _nearest(ecg_beats, pulse_beats)).astype(float)
+    max_delay = cfg.max_delay * cfg.target_fs
+    plausible = np.abs(raw) <= max_delay
+    if plausible.sum() < 2:
+        return np.zeros(len(pulse_beats))
+
+    typical = np.median(raw[plausible])
+    valid = plausible & (np.abs(raw - typical) <= cfg.merge_tolerance * cfg.target_fs)
+    valid &= ~_in_ranges(pulse_beats, exclude)
+    if valid.sum() < 2:
+        return np.full(len(pulse_beats), typical)
+
+    smooth = medfilt(raw[valid], kernel_size=cfg.median_filter_size)
+    return np.interp(pulse_beats, pulse_beats[valid], smooth)
+
+
 def fuse_primary(ecg: ChannelDetection, pulse: ChannelDetection, cfg: DetectorConfig) -> np.ndarray:
     """ECG-led fusion.
 
     Clean ECG beats are kept as they are, because their timing is the most
-    precise. The pulsatile channel is only used where the ECG has a gap
-    longer than gap_factor times the local RR interval (missed beats, noise,
-    a disconnected lead). Its beats are shifted by the pulse transit time
-    first, so they land where the R peak would have been.
+    precise. The pulse channel, shifted back by the pulse transit time, is
+    used in two cases:
+      * windows where the ECG beats don't agree with the pulse (noisy lead),
+      * gaps in the ECG longer than gap_factor times the local RR interval
+        (missed beats, disconnected lead, start/end of the record).
     """
     beats = ecg.beats[ecg.clean_mask()]
     pulse_beats = pulse.beats[pulse.clean_mask()]
-    if len(pulse_beats) == 0:
+    if len(pulse_beats) < 3:
         return beats
     if len(beats) < 3:
-        return beats if len(beats) else pulse_beats
+        # (almost) nothing usable on the ECG, the pulse is all we have
+        return pulse_beats
 
-    max_delay = int(cfg.max_delay * cfg.target_fs)
-    shifted = correct_delay(ecg.beats, pulse_beats, cfg.median_filter_size, max_delay)
+    # first pass with a rough delay to find where the ECG is wrong,
+    # second pass estimates the delay only from the parts where it is fine
+    shifted = pulse_beats - np.round(pulse_delay(beats, pulse_beats, cfg)).astype(int)
+    bad = _disagreeing_windows(beats, shifted, cfg) if cfg.agreement_window > 0 else []
+    if bad:
+        shifted = pulse_beats - np.round(pulse_delay(beats, pulse_beats, cfg, bad)).astype(int)
+        replaced = _in_ranges(beats, bad)
+        beats = np.unique(np.concatenate([beats[~replaced], shifted[_in_ranges(shifted, bad)]]))
+        if len(beats) < 3:
+            return beats
 
     margin = int(cfg.merge_tolerance * cfg.target_fs)
     rr = np.diff(beats)
